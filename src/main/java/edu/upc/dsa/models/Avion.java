@@ -1,13 +1,13 @@
 package edu.upc.dsa.models;
 
-public class Vuelo {
+public class Avion {
     private String id;
     private String modelo;
     private String compañia;
 
-    public Vuelo() {}
+    public Avion() {}
 
-    public Vuelo(String id, String name, String compañia) {
+    public Avion(String id, String modelo, String compañia) {
         this.id = id;
         this.modelo = modelo;
         this.compañia = compañia;
@@ -38,4 +38,12 @@ public class Vuelo {
         this.compañia = compañia;
     }
 
+    @Override
+    public String toString() {
+        return "Avion{" +
+                "id='" + id + '\'' +
+                ", modelo='" + modelo + '\'' +
+                ", compañia='" + compañia + '\'' +
+                '}';
+    }
 }

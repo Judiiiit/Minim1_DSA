@@ -8,236 +8,193 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Date;
 import java.util.List;
 
-public class AvionManagerTest {
-
-    VuelosManager pm;
+public class VuelosManagerTest {
+    private VuelosManager manager;
 
     @Before
     public void setUp() {
-        pm = VuelosManagerImpl.getInstance();
-        pm.addProduct("P1", "Café", 1.5);
-        pm.addProduct("P2", "Bocadillo", 3.0);
-        pm.addProduct("P3", "Donut", 2.0);
+        manager = VuelosManagerImpl.getInstance();
+        manager.addAvion("A1", "A320", "Vueling");
+        manager.addAvion("A2", "Boeing 737", "Iberia");
+        manager.addAvion("A3", "Embraer 195", "Air Europa");
 
-        Maleta maleta = new Maleta("U1");
-        maleta.setName("Marc");
-        pm.getUser("U1"); // asegura que el usuario se crea si no existe
+        Date salida = new Date();
+        Date llegada = new Date(System.currentTimeMillis() + 3600000);
+        manager.addVuelo("V1", salida, llegada, "A1", "BCN", "MAD");
+        manager.addVuelo("V2", salida, llegada, "A2", "BCN", "PAR");
     }
-
     @After
     public void tearDown() {
-        // Como es un Singleton, limpiamos datos al final
-        ((VuelosManagerImpl) pm).clear();
+        ((VuelosManagerImpl) manager).clear();
     }
 
-    // ------------------------------------------------------------
-    // TEST 1: Comprobamos que los productos se añaden correctamente
-    // ------------------------------------------------------------
+    // ---------------- AVIONES ----------------
+
     @Test
-    public void addProductTest() {
-        Avion p = pm.getProduct("P1");
-        Assert.assertNotNull(p);
-        Assert.assertEquals("Café", p.getName());
-        Assert.assertEquals(1.5, p.getPrice(), 0.001);
-    }
-
-    // ------------------------------------------------------------
-    // TEST 2: Realizar un pedido (añadir a la cola)
-    // ------------------------------------------------------------
-    @Test
-    public void createOrderTest() {
-        // Crear pedido para el usuario U1
-        Vuelo avion = new Vuelo("O1", "U1");
-        avion.addProductList(2, "P1");
-        avion.addProductList(1, "P3");
-
-        pm.addOrder(avion);
-
-        // Comprobar que hay un pedido pendiente
-        Assert.assertEquals(1, pm.numOrders());
-
-        // Comprobar que el pedido pertenece al usuario correcto
-        Maleta u = pm.getUser("U1");
-        Assert.assertNotNull(u);
-        Assert.assertEquals(1, u.getOrderList().size());
-        Assert.assertEquals("O1", u.getOrderList().getFirst().getId());
+    public void testGetAvionExistente() {
+        Avion a = manager.getAvion("A1");
+        Assert.assertNotNull(a);
+        Assert.assertEquals("A320", a.getModelo());
+        Assert.assertEquals("Vueling", a.getCompañia());
     }
 
     @Test
-    public void addOrder_createsUserIfNotExistsTest() {
-        ((VuelosManagerImpl) pm).clear();
-
-        // Añadimos productos disponibles
-        pm.addProduct("P1", "Café", 1.50);
-        pm.addProduct("P2", "Donut", 2.00);
-
-        // Crear un pedido con un usuario que NO está en el sistema
-        Vuelo avion = new Vuelo("O1", "U123"); // U123 no existe aún
-        avion.addProductList(1, "P1");
-        avion.addProductList(2, "P2");
-
-        // Confirmar que el usuario no existe antes
-        Maleta preMaleta = pm.getUser("U123");
-        Assert.assertNull("El usuario no debería existir antes del pedido", preMaleta);
-
-        // Añadir el pedido (esto debe crear el usuario automáticamente)
-        pm.addOrder(avion);
-
-        // Comprobar que el pedido está en cola y que el usuario se ha creado
-        Assert.assertEquals("Debe haber 1 pedido pendiente", 1, pm.numOrders());
-
-        Maleta postMaleta = pm.getUser("U123");
-        Assert.assertNotNull("El usuario debe haberse creado al añadir el pedido", postMaleta);
-        Assert.assertEquals("El ID del usuario debe coincidir", "U123", postMaleta.getId());
-
-        // Verificar que el usuario tiene el pedido en su historial
-        Assert.assertEquals("El usuario debe tener 1 pedido asociado", 1, postMaleta.getOrderList().size());
-        Assert.assertEquals("O1", postMaleta.getOrderList().getFirst().getId());
+    public void testActualizarAvion() {
+        manager.addAvion("A1", "Boeing 737", "Ryanair");
+        Avion a = manager.getAvion("A1");
+        Assert.assertEquals("Boeing 737", a.getModelo());
+        Assert.assertEquals("Ryanair", a.getCompañia());
     }
 
-
-    // ------------------------------------------------------------
-    // TEST 3: Servir un pedido (FIFO) y actualizar ventas
-    // ------------------------------------------------------------
     @Test
-    public void deliverOrderTest() {
-        // Pedido 1
-        Vuelo o1 = new Vuelo("O1", "U1");
-        o1.addProductList(2, "P1");  // 2 cafés
-        o1.addProductList(1, "P3");  // 1 donut
-        pm.addOrder(o1);
-
-        // Pedido 2
-        Vuelo o2 = new Vuelo("O2", "U1");
-        o2.addProductList(3, "P2");  // 3 bocadillos
-        pm.addOrder(o2);
-
-        // Al principio hay 2 pedidos en cola
-        Assert.assertEquals(2, pm.numOrders());
-
-        // Servimos el primero
-        Vuelo served = pm.deliverOrder();
-        Assert.assertNotNull(served);
-        Assert.assertEquals("O1", served.getId());
-
-        // Queda 1 pedido en cola
-        Assert.assertEquals(1, pm.numOrders());
-
-        // Comprobamos que se han actualizado las ventas
-        Avion p1 = pm.getProduct("P1"); // Café
-        Avion p2 = pm.getProduct("P2"); // Bocadillo
-        Avion p3 = pm.getProduct("P3"); // Donut
-
-        Assert.assertEquals(2, p1.getSales());
-        Assert.assertEquals(0, p2.getSales());
-        Assert.assertEquals(1, p3.getSales());
-
-        // Servimos el segundo pedido
-        pm.deliverOrder();
-        Assert.assertEquals(0, pm.numOrders());
-
-        // Comprobamos ventas finales
-        Assert.assertEquals(2, p1.getSales());
-        Assert.assertEquals(3, p2.getSales());
-        Assert.assertEquals(1, p3.getSales());
+    public void testAddAvionMismosParametros() {
+        manager.addAvion("A1", "A320", "Vueling"); // mismos datos
+        Avion a = manager.getAvion("A1");
+        Assert.assertEquals("A320", a.getModelo()); // No cambia
+        Assert.assertEquals("Vueling", a.getCompañia());
     }
 
-    // ------------------------------------------------------------
-    // TEST 4: Productos ordenados por precio y por ventas
-    // ------------------------------------------------------------
     @Test
-    public void getProductsOrderedTest() {
-        // --- Preparar datos ---
-        ((VuelosManagerImpl) pm).clear();
-        pm.addProduct("P1", "Café", 1.50);
-        pm.addProduct("P2", "Bocadillo", 3.00);
-        pm.addProduct("P3", "Donut", 2.00);
-
-        // Simular ventas
-        Avion p1 = pm.getProduct("P1");
-        Avion p2 = pm.getProduct("P2");
-        Avion p3 = pm.getProduct("P3");
-
-        p1.setSales(5);  // Café: 5 ventas
-        p2.setSales(2);  // Bocadillo: 2 ventas
-        p3.setSales(10); // Donut: 10 ventas
-
-        // --- Test 1: getProductsByPrice (ascendente) ---
-        List<Avion> byPrice = pm.getProductsByPrice();
-
-        Assert.assertEquals("Café", byPrice.get(0).getName());       // 1.50
-        Assert.assertEquals("Donut", byPrice.get(1).getName());      // 2.00
-        Assert.assertEquals("Bocadillo", byPrice.get(2).getName());  // 3.00
-
-        // --- Test 2: getProductsBySales (descendente) ---
-        List<Avion> bySales = pm.getProductsBySales();
-
-        Assert.assertEquals("Donut", bySales.get(0).getName());      // 10 ventas
-        Assert.assertEquals("Café", bySales.get(1).getName());       // 5 ventas
-        Assert.assertEquals("Bocadillo", bySales.get(2).getName());  // 2 ventas
-
-        // --- Verificación final ---
-        Assert.assertEquals(3, bySales.size());
-        Assert.assertEquals(3, byPrice.size());
+    public void testGetAvionNoExistente() {
+        Avion a = manager.getAvion("AX");
+        Assert.assertNull(a);
     }
 
-    // ------------------------------------------------------------
-    // TEST 5: Listar pedidos de un usuario
-    // ------------------------------------------------------------
+    @Test
+    public void testAvionesSize() {
+        int size = manager.avionesSize();
+        Assert.assertEquals(3, size);
+    }
+
+    // ---------------- VUELOS ----------------
 
     @Test
-    public void getServedOrdersByUserTest() {
-        // Limpiar antes de empezar
-        ((VuelosManagerImpl) pm).clear();
+    public void testGetVueloExistente() {
+        Vuelo v = manager.getVuelo("V1");
+        Assert.assertNotNull(v);
+        Assert.assertEquals("A1", v.getAvionId());
+        Assert.assertEquals("BCN", v.getOrigen());
+        Assert.assertEquals("MAD", v.getDestino());
+    }
 
-        // Añadir productos al sistema
-        pm.addProduct("P1", "Café", 1.50);
-        pm.addProduct("P2", "Donut", 2.00);
-        pm.addProduct("P3", "Bocadillo", 3.00);
+    @Test
+    public void testAddVueloNuevo() {
+        Date salida = new Date();
+        Date llegada = new Date(System.currentTimeMillis() + 7200000);
+        manager.addVuelo("V3", salida, llegada, "A3", "BCN", "ROM");
+        Vuelo v = manager.getVuelo("V3");
+        Assert.assertNotNull(v);
+        Assert.assertEquals("ROM", v.getDestino());
+    }
 
-        // Crear usuario U1 con dos pedidos
-        Vuelo avion1 = new Vuelo("O1", "U1");
-        avion1.addProductList(2, "P1");
-        avion1.addProductList(1, "P2");
+    @Test
+    public void testAddVueloAvionNoExiste() {
+        Date salida = new Date();
+        Date llegada = new Date(System.currentTimeMillis() + 3600000);
+        manager.addVuelo("V99", salida, llegada, "A999", "BCN", "LIS");
+        Vuelo v = manager.getVuelo("V99");
+        Assert.assertNull(v);
+    }
 
-        Vuelo avion2 = new Vuelo("O2", "U1");
-        avion2.addProductList(1, "P3");
+    @Test
+    public void testAddVueloFechasInvalidas() {
+        Date salida = new Date();
+        Date llegada = new Date(System.currentTimeMillis() - 3600000); // llegada antes que salida
+        manager.addVuelo("V50", salida, llegada, "A1", "BCN", "ROM");
+        Vuelo v = manager.getVuelo("V50");
+        Assert.assertNull(v);
+    }
 
-        // Crear otro usuario U2 con un pedido
-        Vuelo avion3 = new Vuelo("O3", "U2");
-        avion3.addProductList(1, "P1");
+    @Test
+    public void testAddVueloMismosParametros() {
+        // Misma configuración que V1
+        Date salida = new Date();
+        Date llegada = new Date(System.currentTimeMillis() + 3600000);
+        manager.addVuelo("V1", salida, llegada, "A1", "BCN", "MAD"); // debería loggear error
+        Assert.assertEquals(2, manager.getAllVuelos().size()); // sigue habiendo solo 2
+    }
 
-        // Añadir los pedidos
-        pm.addOrder(avion1);
-        pm.addOrder(avion2);
-        pm.addOrder(avion3);
+    @Test
+    public void testActualizarVueloExistente() {
+        Vuelo v1 = manager.getVuelo("V1");
+        Date nuevaSalida = new Date(System.currentTimeMillis() + 7200000);
+        Date nuevaLlegada = new Date(System.currentTimeMillis() + 10800000);
+        manager.addVuelo("V1", nuevaSalida, nuevaLlegada, "A1", "BCN", "BER"); // cambia destino
+        Vuelo actualizado = manager.getVuelo("V1");
+        Assert.assertEquals("BER", actualizado.getDestino());
+        Assert.assertEquals(v1.getId(), actualizado.getId());
+    }
 
-        // Servir los pedidos (FIFO)
-        pm.deliverOrder();  // Sirve O1 (U1)
-        pm.deliverOrder();  // Sirve O2 (U1)
-        pm.deliverOrder();  // Sirve O3 (U2)
+    @Test
+    public void testGetVueloNoExistente() {
+        Vuelo v = manager.getVuelo("V500");
+        Assert.assertNull(v);
+    }
 
-        // -------------------------------
-        // 🔍 Comprobaciones
-        // -------------------------------
+    // ---------------- MALETAS ----------------
 
-        // Obtener pedidos servidos del usuario U1
-        List<Vuelo> servedU1 = pm.getServedOrdersByUser("U1");
+    @Test
+    public void testFacturarMaletaCorrecta() {
+        Maleta m1 = new Maleta("M1");
+        manager.facturarMaletaUsuario("V1", m1);
+        List<Maleta> maletas = manager.getMaletasFacturadas("V1");
+        Assert.assertEquals(1, maletas.size());
+        Assert.assertEquals("V1", maletas.get(0).getFlightId());
+    }
 
-        // Comprobamos que hay 2 pedidos servidos
-        Assert.assertEquals("El usuario U1 debe tener 2 pedidos servidos", 2, servedU1.size());
-        Assert.assertEquals("O1", servedU1.get(0).getId());
-        Assert.assertEquals("O2", servedU1.get(1).getId());
+    @Test
+    public void testFacturarMaletaVueloNoExiste() {
+        Maleta m1 = new Maleta("M1");
+        manager.facturarMaletaUsuario("V999", m1);
+        List<Maleta> maletas = manager.getMaletasFacturadas("V999");
+        Assert.assertNotNull(maletas);
+        Assert.assertTrue(maletas.isEmpty());
+    }
 
-        // Obtener pedidos servidos del usuario U2
-        List<Vuelo> servedU2 = pm.getServedOrdersByUser("U2");
-        Assert.assertEquals("El usuario U2 debe tener 1 pedido servido", 1, servedU2.size());
-        Assert.assertEquals("O3", servedU2.get(0).getId());
+    @Test
+    public void testGetMaletasFacturadasVueloNoExiste() {
+        List<Maleta> maletas = manager.getMaletasFacturadas("INEXISTENTE");
+        Assert.assertNotNull(maletas);
+        Assert.assertTrue(maletas.isEmpty());
+    }
 
-        // Obtener pedidos servidos de un usuario inexistente
-        List<Vuelo> servedU3 = pm.getServedOrdersByUser("U3");
-        Assert.assertTrue("El usuario U3 no debe tener pedidos servidos", servedU3.isEmpty());
+    // ---------------- LISTADOS Y CLEAR ----------------
+
+    @Test
+    public void testGetAllAvionesYVuelos() {
+        List<Avion> aviones = manager.getAllAviones();
+        List<Vuelo> vuelos = manager.getAllVuelos();
+        Assert.assertEquals(3, aviones.size());
+        Assert.assertEquals(2, vuelos.size());
+    }
+
+    @Test
+    public void testClear() {
+        manager.clear();
+        Assert.assertEquals(0, manager.getAllAviones().size());
+        Assert.assertEquals(0, manager.getAllVuelos().size());
+    }
+
+    // ---------------- NULOS Y ERRORES ----------------
+
+    @Test
+    public void testAddVueloConFechasNull() {
+        manager.addVuelo("VNULL", null, null, "A1", "BCN", "LIS");
+        Vuelo v = manager.getVuelo("VNULL");
+        Assert.assertNull(v);
+    }
+
+    @Test
+    public void testFacturarMaletaNull() {
+        try {
+            manager.facturarMaletaUsuario("V1", null);
+            Assert.fail("Debería lanzar NullPointerException o loggear error");
+        }
+        catch (Exception e) {
+            Assert.assertTrue(true);
+        }
     }
 }

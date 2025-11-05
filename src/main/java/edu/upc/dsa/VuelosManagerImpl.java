@@ -1,293 +1,217 @@
 package edu.upc.dsa;
 
-import edu.upc.dsa.models.Product;
-import edu.upc.dsa.models.Order;
-import edu.upc.dsa.models.User;
+import edu.upc.dsa.models.Vuelo;
+import edu.upc.dsa.models.Maleta;
+import edu.upc.dsa.models.Avion;
+import edu.upc.dsa.exceptions.*;
 
 import java.util.*;
 
 import org.apache.log4j.Logger;
 
-public class ProductManagerImpl implements ProductManager {
-    private List<Product> productList;
-    private Queue<Order> orderQueue;
-    private HashMap<String, User> users;
-    private List<Order> servedOrders;
+public class VuelosManagerImpl implements VuelosManager {
+    private HashMap<String, Avion> aviones;
+    private HashMap<String, Vuelo> vuelos;
 
-    final static Logger logger = Logger.getLogger(ProductManagerImpl.class);
+    final static Logger logger = Logger.getLogger(VuelosManagerImpl.class);
 
-    private static ProductManager instance;
+    private static VuelosManager instance;
 
-    public ProductManagerImpl() {
-        this.productList = new ArrayList<>();
-        this.orderQueue = new LinkedList<>();
-        this.users = new HashMap<>();
-        this.servedOrders = new ArrayList<>();
+    private VuelosManagerImpl() {
+        this.aviones = new HashMap<>();
+        this.vuelos = new HashMap<>();
     }
 
-    public static ProductManager getInstance() {
-        if (instance==null) instance = new ProductManagerImpl();
+    public static VuelosManager getInstance() {
+        if (instance==null) instance = new VuelosManagerImpl();
         return instance;
     }
 
     @Override
-    public int size() {
-        int ret = this.productList.size();
-        logger.info("size " + ret);
-        return ret;
-    }
-
-    public List<Product> findAll() {
-        return this.productList;
-    }
-
-    @Override
-    public void addProduct(String id, String name, double price) {
-        logger.info(String.format("addProduct(id=%s, name=%s, price=%.2f): start", id, name, price));
-        if (id == null || name == null) {
-            logger.error("addProduct: id o name es null");
-            throw new IllegalArgumentException("id y name no pueden ser null");  // Preguntar si se puede usar el IllegalArgument o si hemos de crear excepciones
-        }
-        if (price < 0) {
-            logger.error("addProduct: price negativo");
-            throw new IllegalArgumentException("price no puede ser negativo");
-        }
-
-        productList.add(new Product(id, name, price));
-
-        logger.info(String.format("addProduct: end (totalProducts=%d)", productList.size()));
-    }
-
-    @Override
-    public List<Product> getProductsByPrice() {
-        logger.info("getProductsByPrice(): start");
-        List<Product> orderedProducts = new ArrayList<>();
-        orderedProducts.addAll(productList);
-        Collections.sort(orderedProducts, Comparator.comparingDouble(Product::getPrice));
-
-        logger.info("getProductsByPrice(): productos ordenados por precio ascendente:");
-        for (Product p : orderedProducts) {
-            logger.info(" - " + p.getName() + " | Precio: " + p.getPrice() + "€ | Ventas: " + p.getSales());
-        }
-        logger.info("getProductsByPrice(): end (size=" + orderedProducts.size() + ")");
-        return orderedProducts;
-    }
-
-    @Override
-    public List<Product> getProductsBySales() {
-        logger.info("getProductsBySales(): start");
-
-        if (productList == null || productList.isEmpty()) {
-            logger.warn("getProductsBySales(): la lista de productos está vacía");
-            return new ArrayList<>();
-        }
-
-        // Clonar la lista para no modificar la original
-        List<Product> sortedList = new ArrayList<>(productList);
-
-        logger.info("getProductsBySales(): ordenando " + sortedList.size() + " productos por número de ventas (descendente)");
-
-        // Ordenar descendentemente por número de ventas
-        sortedList.sort((p1, p2) -> Integer.compare(p2.getSales(), p1.getSales()));
-
-        logger.info("getProductsBySales(): productos ordenados por ventas descendente:");
-        for (Product p : sortedList) {
-            logger.info(" - " + p.getName() + " | Precio: " + p.getPrice() + "€ | Ventas: " + p.getSales());
-        }
-
-        return sortedList;
-    }
-
-    @Override
-    public void addOrder(Order order) {
-        logger.info("addOrder(orderId=" + (order != null ? order.getId() : "null") + "): start");
-        if (order == null) {
-            logger.error("addOrder: order es null");
-            throw new IllegalArgumentException("order no puede ser null");
-        }
-
-        // Asegurar usuario en memoria
-        String userId = order.getUser().getId();
-        User u = users.get(userId);
-        if (u == null) {
-            u = order.getUser(); // viene de order.getUser() (crea si no existe)
-            users.put(userId, u);
-            logger.info("addOrder: nuevo usuario registrado userId=" + userId);
-        }
-
-        // Añadir el pedido a la cola FIFO y a la lista del usuario (histórico)
-        orderQueue.add(order);
-        u.addOrder(order);
-
-        logger.info(String.format("addOrder: end (pendingOrders=%d, userOrders=%d)", orderQueue.size(), u.getOrderList().size()));
-    }
-
-    @Override
-    public Order deliverOrder() {
-        logger.info("deliverOrder(): start");
-        Order served = orderQueue.poll(); // Sacar el siguiente pedido pendiente (FIFO)
-        if (served == null) {
-            logger.info("deliverOrder(): no hay pedidos pendientes (end)");
-            return null;
-        }
-
-        // Lista de productos vendidos en este pedido
-        List<Order.Item> items = served.getProductList();
-
-        if (items != null) {
-            // Recorremos todos los productos del pedido
-            for (Order.Item item : items) {
-                String productId = item.getProductId();
-                int quantity = item.getQuantity();
-                if (quantity <= 0) {
-                    throw new IllegalArgumentException("Invalid quantity for productId=" + productId);
+    public void addAvion(String id, String modelo, String compañia) {
+        logger.info("Añadiendo avión: id = " + id + ", modelo = " + modelo + ", compañia = " + compañia);
+        try {
+            if (aviones.containsKey(id)) {
+                Avion avion = aviones.get(id);
+                if (avion.getModelo().equals(modelo) && avion.getCompañia().equals(compañia)) {
+                    logger.error("No se pueden usar los mismos valores de modelo y compañía para un ID existente");
+                    throw new MismosParametrosPorIdException("El avión con ID " + id + " ya tiene esos valores.");
                 }
-
-                // Buscar el producto en la lista global de productos
-                for (Product p : productList) {
-                    if (p.getId().equals(productId)) {
-                        // Aumentar sus ventas
-                        p.increaseSales(quantity);
-
-                        logger.info("deliverOrder(): producto " + p.getName() +
-                                " incrementa ventas en " + quantity +
-                                " (total ventas=" + p.getSales() + ")");
-                        break; // Salimos del bucle interno
-                    }
+                else {
+                    avion.setModelo(modelo);
+                    avion.setCompañia(compañia);
+                    logger.info("Avión actualizado: " + avion);
                 }
             }
-        } else {
-            logger.warn("deliverOrder(): pedido sin items");
-        }
-        // Añadir el pedido a la lista de servidos
-        servedOrders.add(served);
-        logger.info("deliverOrder(): pedido " + served.getId() +
-                " añadido a la lista de pedidos servidos (total=" + servedOrders.size() + ")");
-
-        logger.info("deliverOrder(): end (servedOrderId=" + served.getId() + ")");
-        return served;
-    }
-
-    @Override
-    public int numOrders() {
-        logger.info("numOrders(): start");
-        int size = orderQueue.size();
-        logger.info("numOrders(): end = " + size);
-        return size;
-    }
-
-    @Override
-    public Product getProduct(String id) {
-        logger.info("getProduct(id=" + id + "): start");
-
-        for (Product p : productList) {
-            if (p.getId().equals(id)) {
-                logger.info("getProduct(): found product " + p.getName());
-                return p;
+            else {
+                Avion avion = new Avion(id, modelo, compañia);
+                aviones.put(id, avion);
+                logger.info("Avión añadido: " + avion);
             }
         }
-
-        logger.warn("getProduct(): no se encontró producto con id=" + id);
-        return null;
+        catch (MismosParametrosPorIdException ex) {
+            logger.error("Excepción mismos parametros con mismo id: ", ex);
+        }
     }
-
     @Override
-    public List<Order> getServedOrdersByUser(String userId) {
-        logger.info("getServedOrdersByUser(userId=" + userId + "): start");
-
-        List<Order> userOrders = new ArrayList<>();
-
-        for (Order o : servedOrders) {
-            if (o.getUser().getId().equals(userId)) {
-                userOrders.add(o);
-
-                // --- Mostrar información detallada del pedido ---
-                StringBuilder sb = new StringBuilder();
-                sb.append("Pedido ").append(o.getId()).append(" -> [");
-
-                if (o.getProductList() != null && !o.getProductList().isEmpty()) {
-                    for (Order.Item it : o.getProductList()) {
-                        Product p = getProduct(it.getProductId());
-                        String name = (p != null) ? p.getName() : "Producto desconocido";
-                        sb.append(it.getQuantity()).append("x ").append(name).append(", ");
-                    }
-                    sb.setLength(sb.length() - 2); // quitar coma final
-                } else {
-                    sb.append("sin productos");
+    public void addVuelo(String id, Date horaSalida, Date horaLlegada, String avionId, String origen, String destino) {
+        logger.info("Añadiendo Vuelo: id =" + id + ", hora salida =" + horaSalida + ", hora llegada =" + horaLlegada + ", aviónId =" + avionId + ", origen =" + origen + ", destino=" + destino);
+        try {
+            if (!aviones.containsKey(avionId)) {
+                logger.error("No se puede crear el vuelo porque el avión con id " + avionId + " no existe");
+                throw new AvionNotFoundException("El avión con id " + avionId + " no existe");
+            }
+            if (horaSalida == null || horaLlegada == null || !horaLlegada.after(horaSalida)) {
+                logger.error("Fechas inválidas: horaLlegada debe ser posterior a horaSalida");
+                throw new BadRequestException("Las fechas del vuelo no son válidas");
+            }
+            // Si el vuelo ya existe
+            if (vuelos.containsKey(id)) {
+                Vuelo vuelo = vuelos.get(id);
+                // Si tiene el mismo avión, origen y destino, no tiene sentido actualizar
+                if (vuelo.getAvionId().equals(avionId) && vuelo.getOrigen().equals(origen) && vuelo.getDestino().equals(destino)) {
+                    logger.error("No se pueden usar los mismos valores para un vuelo con el mismo ID");
+                    throw new MismosParametrosPorIdException("El vuelo con ID " + id + " ya tiene esos valores (avión, origen, destino)");
                 }
-                sb.append("]");
-
-                logger.info(sb.toString());
+                else {
+                    vuelo.setHoraSalida(horaSalida);
+                    vuelo.setHoraLlegada(horaLlegada);
+                    vuelo.setAvionId(avionId);
+                    vuelo.setOrigen(origen);
+                    vuelo.setDestino(destino);
+                    logger.info("Vuelo actualizado: " + vuelo);
+                }
+            }
+            else {
+                Vuelo vuelo = new Vuelo(id, horaSalida, horaLlegada, avionId, origen, destino);
+                vuelos.put(id, vuelo);
+                logger.info("Vuelo añadido correctamente: " + vuelo);
             }
         }
-
-        if (userOrders.isEmpty()) {
-            logger.info("getServedOrdersByUser(): no hay pedidos servidos para el usuario " + userId);
-        } else {
-            logger.info("getServedOrdersByUser(): encontrados " + userOrders.size() + " pedidos servidos");
+        catch (AvionNotFoundException | BadRequestException | MismosParametrosPorIdException ex) {
+            logger.error("Excepción al añadir vuelo: ", ex);
         }
-
-        return userOrders;
     }
-
     @Override
-    public User getUser(String id) {
-        logger.info("getUser(id=" + id + "): start");
-        User u = users.get(id);
-        logger.info("getUser: end (found=" + (u != null) + ")");
-        return u;
+    public void facturarMaletaUsuario (String flightId, Maleta maleta) {
+        logger.info("Facturando maleta: idMaleta = " + maleta.getId() + ", vuelo = " + flightId);
+        try {
+            if (!vuelos.containsKey(flightId)) {
+                logger.error("Error: el vuelo con id " + flightId + " no existe");
+                throw new VueloNotFoundException("El vuelo con id " + flightId + " no existe");
+            }
+            Vuelo vuelo = vuelos.get(flightId);
+            maleta.setFlightId(flightId);
+            vuelo.addMaleta(maleta);
+            logger.info("Maleta facturada correctamente: " + maleta);
+        }
+        catch (VueloNotFoundException ex) {
+            logger.error("Excepción facturar maleta: vuelo no encontrado", ex);
+        }
     }
-
     @Override
-    public void addUser(User user) {
-        logger.info("addUser(user=" + (user != null ? user.getId() : "null") + "): start");
-        if (user == null || user.getId() == null) {
-            logger.error("addUser: user o user.id es null");
-            throw new IllegalArgumentException("user y user.id no pueden ser null");
+    public List<Maleta> getMaletasFacturadas(String flightId) {
+        logger.info("Obteniendo maletas facturadas del vuelo " + flightId);
+        List<Maleta> listaMaletas = new ArrayList<>();
+        try {
+            if (!vuelos.containsKey(flightId)) {
+                logger.error("Error: el vuelo con id " + flightId + " no existe");
+                throw new VueloNotFoundException("El vuelo con id " + flightId + " no existe");
+            }
+            Vuelo vuelo = vuelos.get(flightId);
+            Stack<Maleta> stackMaletas = vuelo.getMaletas();
+            listaMaletas = new ArrayList<>(stackMaletas);
+            logger.info("Se han recuperado " + listaMaletas.size() + " maletas");
         }
-        // Si ya existe, no lo sobrescribimos; solo actualizamos el nombre si viene
-        User existing = users.get(user.getId());
-        if (existing == null) {
-            users.put(user.getId(), user);
-            logger.info("addUser: registrado userId=" + user.getId());
-        } else {
-            if (user.getName() != null) existing.setName(user.getName());
-            logger.info("addUser: ya existía userId=" + user.getId() + " (posible actualización de nombre)");
+        catch (VueloNotFoundException ex) {
+            logger.error("Excepción al obtener maletas facturadas: vuelo no encontrado", ex);
         }
-        logger.info("addUser(): end (totalUsers=" + users.size() + ")");
+        return listaMaletas;
     }
-
-
-    public User addUser(String id, String name) {
-        logger.info("addUser(id=" + id + ", name=" + name + "): start");
-        if (id == null) {
-            logger.error("addUser: id es null");
-            throw new IllegalArgumentException("id no puede ser null");
-        }
-        User u = users.get(id);
-        if (u == null) {
-            u = new User(id);
-            u.setName(name);
-            users.put(id, u);
-            logger.info("addUser: registrado userId=" + id);
-        } else {
-            if (name != null) u.setName(name);
-            logger.info("addUser: ya existía userId=" + id + " (posible actualización de nombre)");
-        }
-        logger.info("addUser(): end");
-        return u;
-    }
-
-
-
+    @Override
     public void clear() {
         logger.info("clear(): start");
-        productList.clear();
-        users.clear();
-        orderQueue.clear();
-        servedOrders.clear();
+        aviones.clear();
+        vuelos.clear();
         logger.info("clear(): end");
     }
 
+    @Override
+    public int avionesSize() {
+        int ret = this.aviones.size();
+        logger.info("size " + ret);
+        return ret;
+    }
+    @Override
+    public Avion getAvion(String id) {
+        logger.info("Buscando avión con id = " + id);
+        try {
+            if (!aviones.containsKey(id)) {
+                logger.error("El avión con id " + id + " no existe");
+                throw new AvionNotFoundException("El avión con id " + id + " no existe");
+            }
+            return aviones.get(id);
+        }
+        catch (AvionNotFoundException ex) {
+            logger.error("Excepción buscar avión: ", ex);
+            return null;
+        }
+    }
+    @Override
+    public Vuelo getVuelo(String id) {
+        logger.info("Buscando vuelo con id = " + id);
+        try {
+            if (!vuelos.containsKey(id)) {
+                logger.error("El vuelo con id " + id + " no existe");
+                throw new VueloNotFoundException("El vuelo con id " + id + " no existe");
+            }
+            return vuelos.get(id);
+        }
+        catch (VueloNotFoundException ex) {
+            logger.error("Excepción buscar avión: ", ex);
+            return null;
+        }
+    }
+    @Override
+    public List<Avion> getAllAviones() {
+        logger.info("Obteniendo todos los aviones");
+        return new ArrayList<>(aviones.values());
+    }
+    @Override
+    public List<Vuelo> getAllVuelos() {
+        logger.info("Obteniendo todos los vuelos");
+        return new ArrayList<>(vuelos.values());
+    }
+    @Override
+    public Avion updateAvion(Avion avion) {
+        Avion a = this.getAvion(avion.getId());
+        logger.info("Actualizando vuelo con id = " + avion.getId());
 
+        if (a!=null) {
+            a.setModelo(avion.getModelo());
+            a.setCompañia(avion.getCompañia());
+            logger.info("Avión actualizado: " + avion);
+        }
+        else {
+            logger.warn("Avion no encontrado "+ avion);
+        }
+        return a;
+    }
+    public Vuelo updateVuelo(Vuelo vuelo) {
+        Vuelo v = this.getVuelo(vuelo.getId());
+        logger.info("Actualizando vuelo con id = " + vuelo.getId());
+
+        if (v!=null) {
+            v.setHoraSalida(vuelo.getHoraSalida());
+            v.setHoraLlegada(vuelo.getHoraLlegada());
+            v.setAvionId(vuelo.getAvionId());
+            v.setOrigen(vuelo.getOrigen());
+            v.setDestino(vuelo.getDestino());
+            logger.info("Vuelo actualizado: " + vuelo);
+        }
+        else {
+            logger.warn("Vuelo no encontrado "+ vuelo);
+        }
+        return v;
+    }
 }
