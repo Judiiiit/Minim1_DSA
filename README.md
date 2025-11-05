@@ -1,2 +1,1 @@
-# rest-example
-"# Minim1_DSA" 
+"Minim1_DSA" 
