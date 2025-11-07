@@ -14,6 +14,7 @@ public class LibrosManagerImpl implements LibrosManager {
     private Queue<Stack<Libro>> montonesLibros;
     private int numLibrosMaxPorMonton = 10;
     private HashMap<String, Libro> catalogoLibrosPorIsbn;
+    private HashMap<String, Libro> catalogoLibrosPorId;
     private HashMap<String, Prestamo> prestamos;
 
     final static Logger logger = Logger.getLogger(LibrosManagerImpl.class);
@@ -24,6 +25,7 @@ public class LibrosManagerImpl implements LibrosManager {
         this.lectores = new HashMap<>();
         this.montonesLibros = new LinkedList<>();
         this.catalogoLibrosPorIsbn = new HashMap<>();
+        this.catalogoLibrosPorId = new HashMap<>();
         this.prestamos = new HashMap<>();
     }
 
@@ -81,11 +83,12 @@ public class LibrosManagerImpl implements LibrosManager {
                 }
                 ultimo = new Stack<>();
                 montonesLibros.add(ultimo);
-                logger.info("Creado nuevo montón. Num montones = " + montonesLibros.size());
+                logger.info("Creado nuevo montón. Ahora el número de montones = " + montonesLibros.size());
             }
             ultimo.push(libro);
             logger.info("Libro apilado. Tamaño del último montón = " + ultimo.size());
-        } catch (LibroNotFoundException ex) {
+        }
+        catch (LibroNotFoundException ex) {
             logger.error("Excepción en almacenarLibro: ", ex);
         }
     }
@@ -112,25 +115,18 @@ public class LibrosManagerImpl implements LibrosManager {
                 libroACatalogar.setNumEjemplares(1);
                 catalogoLibrosPorIsbn.put(isbn, libroACatalogar);
                 logger.info("Nuevo ISBN en catálogo. Ejemplares = 1. " + libroACatalogar);
-                return libroACatalogar;
-            } else {
+            }
+            else {
                 libroYaExistente.aumentarNumEjemplares();
                 logger.info("ISBN ya existente. Incrementando ejemplares a " + libroYaExistente.getNumEjemplares() + " del libro " + libroYaExistente.getId() + " con título " + libroYaExistente.getTitulo());
-                return libroYaExistente;
             }
-        } catch (NoHayLibrosPorCatalogarException ex) {
+            catalogoLibrosPorId.put(libroACatalogar.getId(), libroACatalogar);
+            return catalogoLibrosPorIsbn.get(isbn);
+        }
+        catch (NoHayLibrosPorCatalogarException ex) {
             logger.error("Excepción en catalogarSiguienteLibro: ", ex);
             return null;
         }
-    }
-
-    private Libro findLibroEnCatalogoPorId(String libroId) {
-        for (Libro l : catalogoLibrosPorIsbn.values()) {
-            if (l.getId().equals(libroId)) {
-                return l;
-            }
-        }
-        return null;
     }
 
     @Override
@@ -149,20 +145,26 @@ public class LibrosManagerImpl implements LibrosManager {
                 logger.error("El lector con id " + lectorId + " no existe");
                 throw new LectorNotFoundException("El lector con id " + lectorId + " no existe");
             }
-            Libro libro = findLibroEnCatalogoPorId(libroId);
-            if (libro == null) {
-                logger.error("El libro con id " + libroId + " no existe en el catálogo");
-                throw new LibroNotFoundException("El libro con id " + libroId + " no existe en el catálogo");
+            Libro ejemplar = catalogoLibrosPorId.get(libroId);
+            if (ejemplar == null) {
+                logger.error("El ejemplar con id " + libroId + " no existe o no está catalogado");
+                throw new LibroNotFoundException("El ejemplar con id " + libroId + " no existe o no está catalogado");
             }
-            if (libro.getNumEjemplares() <= 0) {
-                logger.error("No hay ejemplares disponibles para el libro con id " + libroId);
-                throw new SinEjemplaresDisponiblesException("Sin ejemplares disponibles para el libro con id " + libroId);
+            Libro agregadoPorIsbn = catalogoLibrosPorIsbn.get(ejemplar.getIsbn());
+            if (agregadoPorIsbn == null) {
+                logger.error("Inconsistencia: ISBN " + ejemplar.getIsbn() + " no está en el catálogo");
+                throw new LibroNotFoundException("ISBN no encontrado en catálogo");
             }
-            libro.decrementarNumEjemplares();
+            if (agregadoPorIsbn.getNumEjemplares() <= 0) {
+                logger.error("Sin ejemplares disponibles para ISBN " + ejemplar.getIsbn());
+                throw new SinEjemplaresDisponiblesException("Sin ejemplares disponibles para ISBN " + ejemplar.getIsbn());
+            }
+            agregadoPorIsbn.decrementarNumEjemplares();
             prestamo.setEnTramite(true);
             prestamos.put(prestamo.getId(), prestamo);
-            logger.info("Préstamo con id " + prestamo.getId() + " creado correctamente. Ejemplares restantes del libro = " + libro.getNumEjemplares());
-        } catch (PrestamoNotFoundException | LectorNotFoundException | LibroNotFoundException | SinEjemplaresDisponiblesException ex) {
+            logger.info("Préstamo " + prestamo.getId() + " creado. Stock ISBN " + ejemplar.getIsbn() + " = " + agregadoPorIsbn.getNumEjemplares());
+        }
+        catch (PrestamoNotFoundException | LectorNotFoundException | LibroNotFoundException | SinEjemplaresDisponiblesException ex) {
             logger.error("Excepción en prestarLibro: ", ex);
         }
     }
@@ -181,7 +183,8 @@ public class LibrosManagerImpl implements LibrosManager {
             if (prestamosLector.isEmpty()) {
                 logger.error("No se encontraron préstamos para el lector con id " + lectorId);
                 throw new PrestamoNotFoundException("No se encontraron préstamos para el lector con id " + lectorId);
-            } else {
+            }
+            else {
                 logger.info("Se encontraron " + prestamosLector.size() + " préstamos para el lector con id " + lectorId);
             }
             return prestamosLector;
@@ -196,6 +199,7 @@ public class LibrosManagerImpl implements LibrosManager {
         montonesLibros.clear();
         lectores.clear();
         catalogoLibrosPorIsbn.clear();
+        catalogoLibrosPorId.clear();
         logger.info("clear(): end");
     }
 
@@ -219,6 +223,22 @@ public class LibrosManagerImpl implements LibrosManager {
         catch (LectorNotFoundException ex) {
             logger.error("Excepción buscar lector: ", ex);
             return null;
+        }
+    }
+
+    @Override
+    public Libro getLibroPorIsbn(String isbn) {
+        return catalogoLibrosPorIsbn.get(isbn);
+    }
+
+    @Override
+    public int getStockPorIsbn(String isbn) {
+        Libro l = catalogoLibrosPorIsbn.get(isbn);
+        if (l != null) {
+            return l.getNumEjemplares();
+        }
+        else {
+            return 0;
         }
     }
 

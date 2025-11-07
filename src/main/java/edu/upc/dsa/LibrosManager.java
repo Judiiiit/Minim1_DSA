@@ -15,4 +15,6 @@ public interface LibrosManager {
     public void clear();
     public Lector getLector(String id);
     public int lectoresSize();
+    public Libro getLibroPorIsbn(String isbn);
+    public int getStockPorIsbn(String isbn);
 }
